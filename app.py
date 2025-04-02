@@ -3,17 +3,21 @@ import joblib
 import instaloader
 import logging
 import numpy as np
-from flask_cors import CORS
 import os
+from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
-# Configure logging
+# Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load the trained model and scaler
+# Instagram session details
+INSTAGRAM_USERNAME = "_vijay.manda"  
+SESSION_FILE = f"./sessions/session-{INSTAGRAM_USERNAME}"  # Ensure this is the correct session filename
+
+# Load ML Model and Scaler
 MODEL_PATH = "fake_profile_model.pkl"
 SCALER_PATH = "scaler.pkl"
 
@@ -32,11 +36,19 @@ else:
 # Function to scrape Instagram profile details
 def scrape_instagram_profile(username):
     loader = instaloader.Instaloader()
-    
+
+    # Load session file if available
+    if os.path.exists(SESSION_FILE):
+        try:
+            loader.load_session_from_file(INSTAGRAM_USERNAME)  # No need for full path
+            logger.info("✅ Successfully loaded Instagram session file!")
+        except Exception as e:
+            logger.error(f"❌ Error loading session file: {e}")
+
     try:
-        logger.info(f"🔍 Fetching profile for: {username}")
         profile = instaloader.Profile.from_username(loader.context, username)
-        
+
+        # Extract profile details
         profile_data = {
             "followers": profile.followers,
             "posts": profile.mediacount,
@@ -44,7 +56,7 @@ def scrape_instagram_profile(username):
             "description_length": len(profile.biography) if profile.biography else 0
         }
 
-        logger.info(f"✅ Profile Data: {profile_data}")
+        logger.info(f"✅ Scraped Profile Data: {profile_data}")
         return profile_data
 
     except instaloader.exceptions.ProfileNotExistsException:
@@ -54,32 +66,39 @@ def scrape_instagram_profile(username):
         logger.warning(f"🔒 Profile '{username}' is private.")
         return {"error": "Profile is private"}
     except instaloader.exceptions.InstaloaderException as e:
+        if "Please wait a few minutes" in str(e):
+            return {"error": "Instagram is blocking requests. Try again later."}
         logger.error(f"❌ Instaloader error: {e}")
         return {"error": str(e)}
 
 @app.route('/')
 def home():
-    return "Flask backend is running on Render!"
+    return "Flask backend is running!"
 
 @app.route("/detect", methods=["POST"])
 def detect_fake_profile():
     if model is None or scaler is None:
         return jsonify({"error": "Model or scaler file is missing. Please upload them."}), 500
 
-    data = request.json
-    username = data.get("username")
+    try:
+        data = request.get_json()
+        if not data or "username" not in data:
+            return jsonify({"error": "Username is required"}), 400
+    except Exception:
+        return jsonify({"error": "Invalid JSON format"}), 400
 
-    if not username:
-        return jsonify({"error": "Username is required"}), 400
-
-    logger.info(f"🔍 Processing request for username: {username}")
+    username = data["username"]
+    logger.info(f"🔍 Fetching profile: {username}")
 
     profile_data = scrape_instagram_profile(username)
 
-    if "error" in profile_data:
-        logger.warning(f"⚠️ {profile_data['error']}")
+    if not profile_data or "error" in profile_data:
+        logger.warning("⚠️ Profile not found or private")
         return jsonify(profile_data), 404
 
+    logger.info(f"✅ Profile Data: {profile_data}")
+
+    # Extract correct features for prediction
     feature_values = [
         profile_data.get("followers", 0),
         profile_data.get("posts", 0),
@@ -90,17 +109,21 @@ def detect_fake_profile():
     logger.info(f"🔮 Features for model: {feature_values}")
 
     try:
+        # Ensure correct shape for prediction & apply scaling
         features_array = np.array(feature_values).reshape(1, -1)
         features_scaled = scaler.transform(features_array)
+
         logger.info(f"🔄 Scaled Features: {features_scaled}")
 
         prediction = model.predict(features_scaled)[0]  # Predict real or fake
+
         logger.info(f"🧠 Model Prediction: {prediction}")
 
         return jsonify({
             "status": "real" if prediction == 0 else "fake",
             "profile_data": profile_data
         })
+    
     except Exception as e:
         logger.error(f"❌ Prediction Error: {e}")
         return jsonify({"error": f"Model prediction failed: {str(e)}"}), 500
