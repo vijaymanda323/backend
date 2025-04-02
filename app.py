@@ -3,6 +3,7 @@ import joblib
 import instaloader
 import logging
 import numpy as np
+import os
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -21,24 +22,23 @@ except Exception as e:
     logger.error(f"❌ Error loading model/scaler: {e}")
     model, scaler = None, None
 
-# Instagram session details
+# Instagram session setup
 INSTAGRAM_USERNAME = "_vijay.manda"  # Replace with your Instagram username
-SESSION_FILE = "C:/Users/aparn/AppData/Local/Instaloader/session-_vijay.manda"
+SESSION_FILE = os.path.join(os.getcwd(), "session-instagram")  # Dynamic path
 
 # Function to scrape Instagram profile details
 def scrape_instagram_profile(username):
     loader = instaloader.Instaloader()
 
     try:
-        # Load the Instaloader session
+        # Load session file dynamically
         loader.load_session_from_file(INSTAGRAM_USERNAME, SESSION_FILE)
 
         profile = instaloader.Profile.from_username(loader.context, username)
 
-        # Extract profile details
         profile_data = {
-            "followers": profile.followers,  
-            "posts": profile.mediacount,  
+            "followers": profile.followers,
+            "posts": profile.mediacount,
             "profile_pic": 1 if profile.profile_pic_url else 0,
             "description_length": len(profile.biography) if profile.biography else 0
         }
@@ -55,6 +55,11 @@ def scrape_instagram_profile(username):
     except instaloader.exceptions.InstaloaderException as e:
         logger.error(f"❌ Instaloader error: {e}")
         return None
+
+# Home route to prevent 404 errors on Render
+@app.route('/')
+def home():
+    return "✅ Flask backend is running!"
 
 @app.route("/detect", methods=["POST"])
 def detect_fake_profile():
@@ -74,7 +79,6 @@ def detect_fake_profile():
 
     logger.info(f"✅ Profile Data: {profile_data}")
 
-    # Extract correct features for prediction
     feature_values = [
         profile_data.get("followers", 0),
         profile_data.get("posts", 0),
@@ -85,13 +89,12 @@ def detect_fake_profile():
     logger.info(f"🔮 Features for model: {feature_values}")
 
     try:
-        # Ensure correct shape for prediction & apply scaling
         features_array = np.array(feature_values).reshape(1, -1)
         features_scaled = scaler.transform(features_array)
 
         logger.info(f"🔄 Scaled Features: {features_scaled}")
 
-        prediction = model.predict(features_scaled)[0]  # Predict real or fake
+        prediction = model.predict(features_scaled)[0]
 
         logger.info(f"🧠 Model Prediction: {prediction}")
 
@@ -104,5 +107,7 @@ def detect_fake_profile():
         logger.error(f"❌ Prediction Error: {e}")
         return jsonify({"error": f"Model prediction failed: {str(e)}"}), 500
 
+# Use Waitress instead of Flask for production deployment
 if __name__ == "__main__":
-    app.run(debug=True)
+    from waitress import serve
+    serve(app, host="0.0.0.0", port=10000)
