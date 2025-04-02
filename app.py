@@ -29,18 +29,24 @@ if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
 else:
     logger.error("❌ Model or scaler file is missing. Please upload them.")
 
-# Function to scrape Instagram profile details
+# Instaloader session authentication
+INSTAGRAM_USERNAME = "_vijay.manda"
+SESSION_FILE = "C:/Users/aparn/AppData/Local/Instaloader/session-_vijay.manda"
+
 def scrape_instagram_profile(username):
     loader = instaloader.Instaloader()
 
     try:
+        # Load session for authentication
+        loader.load_session_from_file(INSTAGRAM_USERNAME, SESSION_FILE)
+
         profile = instaloader.Profile.from_username(loader.context, username)
 
         # Extract profile details
         profile_data = {
             "followers": profile.followers,
             "posts": profile.mediacount,
-            "profile_pic": 1 if profile.profile_pic_url else 0,
+            "profile_pic": 1 if profile.has_profile_pic else 0,
             "description_length": len(profile.biography) if profile.biography else 0
         }
 
@@ -49,13 +55,13 @@ def scrape_instagram_profile(username):
 
     except instaloader.exceptions.ProfileNotExistsException:
         logger.warning(f"⚠️ Profile '{username}' not found.")
-        return None
+        return {"error": "Profile not found"}
     except instaloader.exceptions.PrivateProfileNotFollowedException:
         logger.warning(f"🔒 Profile '{username}' is private.")
         return {"error": "Profile is private"}
     except instaloader.exceptions.InstaloaderException as e:
         logger.error(f"❌ Instaloader error: {e}")
-        return None
+        return {"error": f"Instaloader error: {str(e)}"}
 
 @app.route('/')
 def home():
@@ -76,9 +82,8 @@ def detect_fake_profile():
 
     profile_data = scrape_instagram_profile(username)
 
-    if not profile_data or "error" in profile_data:
-        logger.warning("⚠️ Profile not found or private")
-        return jsonify({"error": "Profile not found or is private"}), 404
+    if "error" in profile_data:
+        return jsonify(profile_data), 404
 
     logger.info(f"✅ Profile Data: {profile_data}")
 
@@ -113,5 +118,6 @@ def detect_fake_profile():
         return jsonify({"error": f"Model prediction failed: {str(e)}"}), 500
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
     from waitress import serve
-    serve(app, host="0.0.0.0", port=10000)
+    serve(app, host="0.0.0.0", port=port)
