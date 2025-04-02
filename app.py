@@ -5,7 +5,6 @@ import logging
 import numpy as np
 from flask_cors import CORS
 import os
-import traceback
 
 app = Flask(__name__)
 CORS(app)
@@ -33,25 +32,30 @@ else:
 # Function to scrape Instagram profile details
 def scrape_instagram_profile(username):
     loader = instaloader.Instaloader()
+    
     try:
+        logger.info(f"🔍 Fetching profile for: {username}")
         profile = instaloader.Profile.from_username(loader.context, username)
+        
         profile_data = {
             "followers": profile.followers,
             "posts": profile.mediacount,
             "profile_pic": 1 if profile.profile_pic_url else 0,
             "description_length": len(profile.biography) if profile.biography else 0
         }
-        logger.info(f"✅ Scraped Profile Data: {profile_data}")
+
+        logger.info(f"✅ Profile Data: {profile_data}")
         return profile_data
+
     except instaloader.exceptions.ProfileNotExistsException:
         logger.warning(f"⚠️ Profile '{username}' not found.")
-        return None
+        return {"error": "Profile not found"}
     except instaloader.exceptions.PrivateProfileNotFollowedException:
         logger.warning(f"🔒 Profile '{username}' is private.")
         return {"error": "Profile is private"}
     except instaloader.exceptions.InstaloaderException as e:
         logger.error(f"❌ Instaloader error: {e}")
-        return None
+        return {"error": str(e)}
 
 @app.route('/')
 def home():
@@ -68,27 +72,29 @@ def detect_fake_profile():
     if not username:
         return jsonify({"error": "Username is required"}), 400
 
-    logger.info(f"🔍 Fetching profile: {username}")
+    logger.info(f"🔍 Processing request for username: {username}")
+
+    profile_data = scrape_instagram_profile(username)
+
+    if "error" in profile_data:
+        logger.warning(f"⚠️ {profile_data['error']}")
+        return jsonify(profile_data), 404
+
+    feature_values = [
+        profile_data.get("followers", 0),
+        profile_data.get("posts", 0),
+        profile_data.get("profile_pic", 0),
+        profile_data.get("description_length", 0)
+    ]
+
+    logger.info(f"🔮 Features for model: {feature_values}")
 
     try:
-        profile_data = scrape_instagram_profile(username)
-        if not profile_data or "error" in profile_data:
-            return jsonify({"error": "Profile not found or is private"}), 404
-        
-        feature_values = [
-            profile_data.get("followers", 0),
-            profile_data.get("posts", 0),
-            profile_data.get("profile_pic", 0),
-            profile_data.get("description_length", 0)
-        ]
-
-        logger.info(f"🔮 Features for model: {feature_values}")
-
         features_array = np.array(feature_values).reshape(1, -1)
         features_scaled = scaler.transform(features_array)
         logger.info(f"🔄 Scaled Features: {features_scaled}")
 
-        prediction = model.predict(features_scaled)[0]
+        prediction = model.predict(features_scaled)[0]  # Predict real or fake
         logger.info(f"🧠 Model Prediction: {prediction}")
 
         return jsonify({
@@ -96,9 +102,8 @@ def detect_fake_profile():
             "profile_data": profile_data
         })
     except Exception as e:
-        tb = traceback.format_exc()
-        logger.error(f"❌ Internal Server Error: {tb}")
-        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
+        logger.error(f"❌ Prediction Error: {e}")
+        return jsonify({"error": f"Model prediction failed: {str(e)}"}), 500
 
 if __name__ == "__main__":
     from waitress import serve
