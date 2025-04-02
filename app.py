@@ -14,36 +14,36 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load the trained model and scaler
-try:
-    model = joblib.load("fake_profile_model.pkl")
-    scaler = joblib.load("scaler.pkl")
-    logger.info("✅ Model and scaler loaded successfully.")
-except Exception as e:
-    logger.error(f"❌ Error loading model/scaler: {e}")
-    model, scaler = None, None
+MODEL_PATH = "fake_profile_model.pkl"
+SCALER_PATH = "scaler.pkl"
 
-# Instagram session details
-INSTAGRAM_USERNAME = "_vijay.manda"  # Replace with your Instagram username
-SESSION_FILE = os.path.join(os.getcwd(), "session-instagram")
+model, scaler = None, None
+
+if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
+    try:
+        model = joblib.load(MODEL_PATH)
+        scaler = joblib.load(SCALER_PATH)
+        logger.info("✅ Model and scaler loaded successfully.")
+    except Exception as e:
+        logger.error(f"❌ Error loading model/scaler: {e}")
+else:
+    logger.error("❌ Model or scaler file is missing. Please upload them.")
 
 # Function to scrape Instagram profile details
 def scrape_instagram_profile(username):
     loader = instaloader.Instaloader()
 
     try:
-        # Load the Instaloader session
-        loader.load_session_from_file(INSTAGRAM_USERNAME, SESSION_FILE)
-
         profile = instaloader.Profile.from_username(loader.context, username)
 
         # Extract profile details
         profile_data = {
-            "followers": profile.followers,  
-            "posts": profile.mediacount,  
+            "followers": profile.followers,
+            "posts": profile.mediacount,
             "profile_pic": 1 if profile.profile_pic_url else 0,
             "description_length": len(profile.biography) if profile.biography else 0
         }
-        
+
         logger.info(f"✅ Scraped Profile Data: {profile_data}")
         return profile_data
 
@@ -56,12 +56,16 @@ def scrape_instagram_profile(username):
     except instaloader.exceptions.InstaloaderException as e:
         logger.error(f"❌ Instaloader error: {e}")
         return None
+
 @app.route('/')
 def home():
-    return "Flask backend is running!"
+    return "Flask backend is running on Render!"
 
 @app.route("/detect", methods=["POST"])
 def detect_fake_profile():
+    if model is None or scaler is None:
+        return jsonify({"error": "Model or scaler file is missing. Please upload them."}), 500
+
     data = request.json
     username = data.get("username")
 
