@@ -55,6 +55,9 @@ def scrape_instagram_profile(username):
     except instaloader.exceptions.InstaloaderException as e:
         logger.error(f"❌ Instaloader error: {e}")
         return None
+@app.route("/", methods=["GET"])
+def home():
+    return "✅ Server is running!"
 
 @app.route("/detect", methods=["POST"])
 def detect_fake_profile():
