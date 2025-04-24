@@ -22,15 +22,15 @@ except Exception as e:
     model, scaler = None, None
 
 # Instagram session details
-INSTAGRAM_USERNAME = "_vijay.manda"  # Replace with your Instagram username
-SESSION_FILE = "C:/Users/aparn/AppData/Local/Instaloader/session-_vijay.manda"
+INSTAGRAM_USERNAME = "_vijay.manda"  
+SESSION_FILE = "session-_vijay.manda"  # Relative path to session file
 
 # Function to scrape Instagram profile details
 def scrape_instagram_profile(username):
     loader = instaloader.Instaloader()
 
     try:
-        # Load the Instaloader session
+        # Load the Instaloader session using the relative path
         loader.load_session_from_file(INSTAGRAM_USERNAME, SESSION_FILE)
 
         profile = instaloader.Profile.from_username(loader.context, username)
@@ -55,6 +55,7 @@ def scrape_instagram_profile(username):
     except instaloader.exceptions.InstaloaderException as e:
         logger.error(f"❌ Instaloader error: {e}")
         return None
+
 @app.route("/", methods=["GET"])
 def home():
     return "✅ Server is running!"
