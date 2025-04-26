@@ -24,7 +24,7 @@ except Exception as e:
 
 # Instagram session details
 INSTAGRAM_USERNAME = "_vijay.manda"  # Replace with your Instagram username
-SESSION_FILE = "C:/Users/aparn/AppData/Local/Instaloader/session-_vijay.manda"
+SESSION_FILE = "session-_vijay.manda"
 
 # Function to scrape Instagram profile details
 def scrape_instagram_profile(username):

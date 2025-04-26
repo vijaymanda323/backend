@@ -1,8 +1,8 @@
 import instaloader
 
 # Replace with your actual Instagram credentials
-username = "aparna_chowdhary_2244"
-password = "Aparna@0987"  # Add your Instagram password
+username = "_vijay.manda"
+password = "Vijay@3369"  # Add your Instagram password
 
 # Initialize Instaloader instance
 loader = instaloader.Instaloader()
