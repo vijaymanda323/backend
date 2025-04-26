@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from flask_cors import CORS
 
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
@@ -22,23 +23,23 @@ except Exception as e:
     model, scaler = None, None
 
 # Instagram session details
-INSTAGRAM_USERNAME = "_vijay.manda"  
-SESSION_FILE = "session-_vijay.manda"  # Relative path to session file
+INSTAGRAM_USERNAME = "_vijay.manda"  # Replace with your Instagram username
+SESSION_FILE = "C:/Users/aparn/AppData/Local/Instaloader/session-_vijay.manda"
 
 # Function to scrape Instagram profile details
 def scrape_instagram_profile(username):
     loader = instaloader.Instaloader()
 
     try:
-        # Load the Instaloader session using the relative path
+        # Load the Instaloader session
         loader.load_session_from_file(INSTAGRAM_USERNAME, SESSION_FILE)
 
         profile = instaloader.Profile.from_username(loader.context, username)
 
         # Extract profile details
         profile_data = {
-            "followers": profile.followers,  
-            "posts": profile.mediacount,  
+            "followers": profile.followers,
+            "posts": profile.mediacount,
             "profile_pic": 1 if profile.profile_pic_url else 0,
             "description_length": len(profile.biography) if profile.biography else 0
         }
@@ -55,14 +56,21 @@ def scrape_instagram_profile(username):
     except instaloader.exceptions.InstaloaderException as e:
         logger.error(f"❌ Instaloader error: {e}")
         return None
-
-@app.route("/", methods=["GET"])
-def home():
-    return "✅ Server is running!"
+    except Exception as e:
+        logger.error(f"❌ Unexpected scraping error: {e}")
+        return None
 
 @app.route("/detect", methods=["POST"])
 def detect_fake_profile():
-    data = request.json
+    if not model or not scaler:
+        logger.error("❌ Model or scaler not loaded. Cannot process detection.")
+        return jsonify({"error": "Server model not loaded properly"}), 500
+
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Request must be in JSON format"}), 400
+
     username = data.get("username")
 
     if not username:
@@ -72,13 +80,12 @@ def detect_fake_profile():
 
     profile_data = scrape_instagram_profile(username)
 
-    if not profile_data or "error" in profile_data:
-        logger.warning("⚠️ Profile not found or private")
-        return jsonify({"error": "Profile not found or is private"}), 404
+    if not profile_data:
+        return jsonify({"error": "Profile not found or could not be fetched"}), 404
+    if "error" in profile_data:
+        return jsonify(profile_data), 403  # Private profile
 
-    logger.info(f"✅ Profile Data: {profile_data}")
-
-    # Extract correct features for prediction
+    # Prepare features for prediction
     feature_values = [
         profile_data.get("followers", 0),
         profile_data.get("posts", 0),
@@ -89,13 +96,13 @@ def detect_fake_profile():
     logger.info(f"🔮 Features for model: {feature_values}")
 
     try:
-        # Ensure correct shape for prediction & apply scaling
+        # Ensure correct shape for prediction and apply scaling
         features_array = np.array(feature_values).reshape(1, -1)
         features_scaled = scaler.transform(features_array)
 
         logger.info(f"🔄 Scaled Features: {features_scaled}")
 
-        prediction = model.predict(features_scaled)[0]  # Predict real or fake
+        prediction = model.predict(features_scaled)[0]  # 0 = real, 1 = fake
 
         logger.info(f"🧠 Model Prediction: {prediction}")
 
@@ -103,10 +110,11 @@ def detect_fake_profile():
             "status": "real" if prediction == 0 else "fake",
             "profile_data": profile_data
         })
-    
+
     except Exception as e:
         logger.error(f"❌ Prediction Error: {e}")
-        return jsonify({"error": f"Model prediction failed: {str(e)}"}), 500
+        return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
 
+# Run server
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=8000)
