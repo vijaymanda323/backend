@@ -74,7 +74,7 @@ def detect_fake_profile():
         logger.info(f"🧠 Model Prediction: {prediction}")
 
         return jsonify({
-            "status": "real" if prediction == 0 else "fake",
+            "status": "real" if prediction == 1 else "fake",
             "profile_data": profile_data
         })
 
