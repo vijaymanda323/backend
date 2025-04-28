@@ -1,9 +1,9 @@
 from flask import Flask, request, jsonify
 import joblib
-import instaloader
 import logging
 import numpy as np
 from flask_cors import CORS
+import os
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -22,43 +22,21 @@ except Exception as e:
     logger.error(f"❌ Error loading model/scaler: {e}")
     model, scaler = None, None
 
-# Instagram session details
-INSTAGRAM_USERNAME = "_vijay.manda"  # Replace with your Instagram username
-SESSION_FILE = "session-_vijay.manda"
+# Simulate Instagram profile details (NA values)
+def simulate_instagram_profile(username):
+    logger.info(f"🔧 Simulating profile data for username: {username}")
+    
+    profile_data = {
+        "followers": "NA",
+        "posts": "NA",
+        "profile_pic": "NA",
+        "description_length": "NA"
+    }
+    return profile_data
 
-# Function to scrape Instagram profile details
-def scrape_instagram_profile(username):
-    loader = instaloader.Instaloader()
-
-    try:
-        # Load the Instaloader session
-        loader.load_session_from_file(INSTAGRAM_USERNAME, SESSION_FILE)
-
-        profile = instaloader.Profile.from_username(loader.context, username)
-
-        # Extract profile details
-        profile_data = {
-            "followers": profile.followers,
-            "posts": profile.mediacount,
-            "profile_pic": 1 if profile.profile_pic_url else 0,
-            "description_length": len(profile.biography) if profile.biography else 0
-        }
-        
-        logger.info(f"✅ Scraped Profile Data: {profile_data}")
-        return profile_data
-
-    except instaloader.exceptions.ProfileNotExistsException:
-        logger.warning(f"⚠️ Profile '{username}' not found.")
-        return None
-    except instaloader.exceptions.PrivateProfileNotFollowedException:
-        logger.warning(f"🔒 Profile '{username}' is private.")
-        return {"error": "Profile is private"}
-    except instaloader.exceptions.InstaloaderException as e:
-        logger.error(f"❌ Instaloader error: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"❌ Unexpected scraping error: {e}")
-        return None
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({"message": "Fake Profile Detector API is running 🛡️"}), 200
 
 @app.route("/detect", methods=["POST"])
 def detect_fake_profile():
@@ -76,27 +54,16 @@ def detect_fake_profile():
     if not username:
         return jsonify({"error": "Username is required"}), 400
 
-    logger.info(f"🔍 Fetching profile: {username}")
+    logger.info(f"🔍 Processing profile: {username}")
 
-    profile_data = scrape_instagram_profile(username)
+    profile_data = simulate_instagram_profile(username)
 
-    if not profile_data:
-        return jsonify({"error": "Profile not found or could not be fetched"}), 404
-    if "error" in profile_data:
-        return jsonify(profile_data), 403  # Private profile
-
-    # Prepare features for prediction
-    feature_values = [
-        profile_data.get("followers", 0),
-        profile_data.get("posts", 0),
-        profile_data.get("profile_pic", 0),
-        profile_data.get("description_length", 0)
-    ]
+    # Dummy feature values (since real scraping is not done)
+    feature_values = [0, 0, 0, 0]
 
     logger.info(f"🔮 Features for model: {feature_values}")
 
     try:
-        # Ensure correct shape for prediction and apply scaling
         features_array = np.array(feature_values).reshape(1, -1)
         features_scaled = scaler.transform(features_array)
 
@@ -117,4 +84,5 @@ def detect_fake_profile():
 
 # Run server
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=8000)
+    port = int(os.environ.get("PORT", 8000))  # Render provides PORT env variable
+    app.run(host="0.0.0.0", port=port)
